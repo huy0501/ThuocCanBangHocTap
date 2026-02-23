@@ -1,21 +1,261 @@
+import uuid
 import streamlit as st
-import pandas as pd
+import streamlit.components.v1 as components
 import matplotlib.pyplot as plt
 
-# =========================
-# Page
-# =========================
-st.set_page_config(page_title="Thước Cân Bằng Học Tập", layout="wide")
 
-st.title("Thước Cân Bằng Học Tập")
-st.caption(
-    "Dashboard prototype: thêm học sinh (ID/Lớp/Tên) → nhập điểm → phân nhóm → mức lệch → gợi ý. "
-    "Công cụ chỉ hỗ trợ ra quyết định, không thay thế giáo viên."
+# =========================
+# Page config
+# =========================
+st.set_page_config(
+    page_title="Bảng Điều Khiển - Thước Cân Bằng",
+    layout="wide",
+    initial_sidebar_state="collapsed",
 )
 
 # =========================
-# Exercise library (for Lệch rõ)
+# CSS
 # =========================
+CSS = """
+<style>
+#MainMenu {visibility:hidden;}
+footer {visibility:hidden;}
+header {visibility:hidden;}
+
+section[data-testid="stSidebar"] { display: none !important; }
+/* Tránh display:none quá mạnh vì đôi khi làm layout wrapper “lệch” */
+div[data-testid="collapsedControl"] { visibility: hidden !important; width: 0 !important; height: 0 !important; }
+
+[data-testid="stAppViewContainer"] { background:#f5f6f8; }
+.block-container { padding-top: 1.1rem; padding-bottom: 6rem; } /* chừa chỗ cho chat nổi */
+h1 { font-weight: 900; letter-spacing: -0.02em; }
+
+/* LEFT NAV */
+.leftNav {
+  background: #0b0f19;
+  color: #e5e7eb;
+  border-radius: 14px;
+  padding: 14px 12px;
+  height: calc(100vh - 2.2rem);
+  position: sticky;
+  top: 1.1rem;
+  overflow: auto;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.leftNav .brand { font-weight: 900; font-size: 18px; margin-bottom: 12px; }
+.leftNav .navItem {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  padding: 10px 10px;
+  margin: 8px 0;
+  font-weight: 800;
+}
+.leftNav .navItem.muted { background: transparent; border: 1px solid rgba(255,255,255,0.06); }
+.leftNav small { opacity: 0.85; font-weight: 600; }
+
+/* SUBJECT CARDS */
+.course-card {
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid rgba(17,24,39,0.10);
+  box-shadow: 0 1px 0 rgba(17,24,39,0.04);
+}
+.course-top { height: 120px; position: relative; }
+.course-dots {
+  position:absolute;
+  right: 10px; top: 10px;
+  color: rgba(255,255,255,0.95);
+  font-size: 22px;
+  font-weight: 900;
+}
+.course-body { padding: 12px 14px 10px 14px; }
+.course-slug { font-weight: 900; font-size: 16px; margin-bottom: 2px; text-transform: lowercase; }
+.course-code { color:#6b7280; font-size: 13px; line-height: 1.25; }
+.course-icons { margin-top: 10px; color:#6b7280; font-size: 16px; }
+.course-icons span { margin-right: 14px; }
+
+/* RIGHT PANEL */
+.rightPanel {
+  background: #ffffff;
+  border: 1px solid rgba(17,24,39,0.10);
+  border-radius: 14px;
+  padding: 14px 14px;
+  box-shadow: 0 1px 0 rgba(17,24,39,0.04);
+  position: sticky;
+  top: 1.1rem;
+  max-height: calc(100vh - 2.2rem);
+  overflow: auto;
+}
+.todo-title { font-size: 18px; font-weight: 900; margin: 0 0 10px 0; }
+.todo-item {
+  display: grid;
+  grid-template-columns: 18px 1fr 14px;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(17,24,39,0.08);
+  background: #fafafa;
+  margin-bottom: 10px;
+}
+.todo-item b { display:block; font-size: 13px; line-height: 1.25; }
+.todo-item small { color:#6b7280; display:block; margin-top: 4px; }
+.todo-x { color:#9ca3af; font-weight: 900; }
+
+/* MID PANEL */
+.midPanel {
+  background: #ffffff;
+  border: 1px solid rgba(17,24,39,0.10);
+  border-radius: 14px;
+  padding: 14px 14px;
+  box-shadow: 0 1px 0 rgba(17,24,39,0.04);
+  margin-top: 14px;
+}
+
+/* Hide widget labels */
+label[data-testid="stWidgetLabel"] { display:none !important; }
+
+/* CHATBOX UI */
+.chat-shell {
+  background: #fff;
+  border: 1px solid rgba(17,24,39,0.12);
+  border-radius: 16px;
+  box-shadow: 0 18px 40px rgba(0,0,0,0.20);
+  overflow: hidden;
+}
+.chat-head {
+  background: #0b0f19;
+  color: #e5e7eb;
+  padding: 10px 12px;
+  display:flex;
+  justify-content: space-between;
+  align-items:center;
+  font-weight: 900;
+}
+.chat-hint { font-size: 12px; opacity: .9; font-weight: 800; }
+.chat-body {
+  background: #f8fafc;
+  padding: 10px 10px;
+  overflow-y: auto;
+}
+.bubble {
+  background: #fff;
+  border: 1px solid rgba(17,24,39,0.08);
+  border-radius: 12px;
+  padding: 8px 10px;
+  margin: 8px 0;
+}
+.bubble.user { border-left: 4px solid #2563eb; }
+.bubble.ai { border-left: 4px solid #10b981; }
+.bname { font-weight: 900; margin-bottom: 2px; }
+
+.chat-foot {
+  background: #fff;
+  border-top: 1px solid rgba(17,24,39,0.10);
+  padding: 10px 10px;
+}
+
+/* Minimized pill */
+.chat-pill {
+  background: #2563eb;
+  color: #fff;
+  border-radius: 999px;
+  padding: 10px 14px;
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  box-shadow: 0 12px 28px rgba(0,0,0,0.18);
+  border: 1px solid rgba(17,24,39,0.12);
+  font-weight: 900;
+}
+.chat-pill .dot {
+  width: 10px; height: 10px; border-radius: 999px;
+  background: rgba(255,255,255,0.9);
+}
+.chat-pill .miniBtn button {
+  height: 34px !important;
+  border-radius: 999px !important;
+  background: rgba(255,255,255,0.15) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255,255,255,0.22) !important;
+  font-weight: 900 !important;
+  padding: 0 12px !important;
+}
+.chat-pill .miniBtn button:hover { filter: brightness(1.05); }
+
+/* Responsive tweak */
+@media (max-width: 520px) {
+  .block-container { padding-bottom: 9rem; }
+}
+</style>
+"""
+st.markdown(CSS, unsafe_allow_html=True)
+
+
+# =========================
+# Floating helper (không phụ thuộc streamlit-float)
+# =========================
+def st_float_container(key: str, css: str):
+    anchor_id = f"float-anchor-{key}-{uuid.uuid4().hex}"
+    st.markdown(f'<div id="{anchor_id}"></div>', unsafe_allow_html=True)
+
+    components.html(
+        f"""
+        <script>
+        (function() {{
+          const run = () => {{
+            const doc = window.parent.document;
+            const anchor = doc.getElementById("{anchor_id}");
+            if (!anchor) return;
+
+            let target =
+              anchor.closest('div[data-testid="stVerticalBlock"]') ||
+              anchor.closest('div[data-testid="stHorizontalBlock"]');
+
+            if (!target) {{
+              let el = anchor;
+              for (let i = 0; i < 60; i++) {{
+                if (!el) break;
+                const dt = el.getAttribute && el.getAttribute("data-testid");
+                if (dt === "stVerticalBlock" || dt === "stHorizontalBlock") {{
+                  target = el;
+                  break;
+                }}
+                el = el.parentElement;
+              }}
+            }}
+
+            if (!target) return;
+
+            target.style.cssText += `{css}`;
+            target.style.zIndex = "999999";
+            target.style.pointerEvents = "auto";
+            target.style.margin = "0";
+          }};
+
+          setTimeout(run, 50);
+          setTimeout(run, 250);
+        }})();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
+# =========================
+# Data
+# =========================
+SUBJECT_CARDS = [
+    {"name": "Toán",       "slug": "math",       "code": "THCS.GP-MATH-8", "year": "2025-2026", "color": "#1f77b4"},
+    {"name": "Khoa học",   "slug": "science",    "code": "THCS.GP-SCI-8",  "year": "2025-2026", "color": "#8e44ad"},
+    {"name": "Tin học",    "slug": "computer",   "code": "THCS.GP-IT-8",   "year": "2025-2026", "color": "#9a7421"},
+    {"name": "Tiếng Anh",  "slug": "english",    "code": "THCS.GP-ENG-8",  "year": "2025-2026", "color": "#0f7a2b"},
+    {"name": "Văn",        "slug": "literature", "code": "THCS.GP-VNS-8",  "year": "2025-2026", "color": "#ff5c00"},
+    {"name": "Lịch Sử",    "slug": "history",    "code": "THCS.GP-HIS-8",  "year": "2025-2026", "color": "#2c3e50"},
+]
+
 EXERCISES = {
     "Văn": [
         "Đọc 1 đoạn 250–400 chữ, gạch chân 5 từ khóa và viết 3 câu tóm tắt.",
@@ -49,16 +289,33 @@ EXERCISES = {
     ],
 }
 
-def pick_exercises(subject: str, n: int = 2):
-    items = EXERCISES.get(subject, [])
-    return items[:n] if len(items) >= n else items
+
+# =========================
+# Rules (NEW) ✅
+# =========================
+PASS_THRESHOLD = 6.5     # chỉ cần < 6.5 là phải improve
+FOCUS_K = 3              # ưu tiên tối đa 3 môn thấp nhất
+ALL_SUBJECTS = ["Toán", "Khoa học", "Tin", "Văn", "Sử", "Anh"]
+
 
 # =========================
 # Helpers
 # =========================
+def pick_exercises(subject: str, n: int = 2):
+    items = EXERCISES.get(subject, [])
+    return items[:n] if len(items) >= n else items
+
 def compute_scores(row):
-    logic_avg = round((row["Toán"] + row["Khoa học"] + row["Tin"]) / 3, 2)
-    lang_avg = round((row["Văn"] + row["Sử"] + row["Anh"]) / 3, 2)
+    # ép float để tránh string
+    math = float(row.get("Toán", 0))
+    sci  = float(row.get("Khoa học", 0))
+    it   = float(row.get("Tin", 0))
+    lit  = float(row.get("Văn", 0))
+    hist = float(row.get("Sử", 0))
+    eng  = float(row.get("Anh", 0))
+
+    logic_avg = round((math + sci + it) / 3, 2)
+    lang_avg = round((lit + hist + eng) / 3, 2)
     diff = round(abs(logic_avg - lang_avg), 2)
 
     if diff < 1:
@@ -67,27 +324,153 @@ def compute_scores(row):
         level = "Lệch vừa"
     else:
         level = "Lệch rõ"
-
     return logic_avg, lang_avg, diff, level
-
-def badge(level: str):
-    if level == "Cân bằng tốt":
-        st.success(level)
-    elif level == "Lệch vừa":
-        st.warning(level)
-    else:
-        st.error(level)
 
 def student_label(s):
     return f'{s["ID"]} | {s["Lớp"]} | {s["Tên"]}'
 
 def weakest_subjects(scores_dict, group: str, k: int = 2):
-    if group == "Logic":
-        subs = ["Toán", "Khoa học", "Tin"]
-    else:
-        subs = ["Văn", "Sử", "Anh"]
-    scored = sorted([(s, scores_dict[s]) for s in subs], key=lambda x: x[1])  # thấp -> cao
+    subs = ["Toán", "Khoa học", "Tin"] if group == "Logic" else ["Văn", "Sử", "Anh"]
+    scored = sorted([(s, scores_dict[s]) for s in subs], key=lambda x: x[1])
     return [s for s, _ in scored[:k]]
+
+def get_low_subjects(scores: dict, threshold: float = PASS_THRESHOLD):
+    low = []
+    for s in ALL_SUBJECTS:
+        v = float(scores.get(s, 0))
+        if v < threshold:
+            low.append((s, v))
+    low.sort(key=lambda x: x[1])
+    return low
+
+def full_recommendation(current, input_row) -> str:
+    logic_avg, lang_avg, diff, level = compute_scores({**current, **input_row})
+
+    scores_for_pick = {
+        "Toán": float(input_row["Toán"]),
+        "Khoa học": float(input_row["Khoa học"]),
+        "Tin": float(input_row["Tin"]),
+        "Văn": float(input_row["Văn"]),
+        "Sử": float(input_row["Sử"]),
+        "Anh": float(input_row["Anh"]),
+    }
+
+    low = get_low_subjects(scores_for_pick, threshold=PASS_THRESHOLD)
+
+    out = []
+    out.append(f"**Kết quả:** TB Logic={logic_avg} | TB Ngôn ngữ={lang_avg} | Δ={diff}")
+    out.append(f"**Cân bằng nhóm:** {level}")
+    out.append("")
+
+    # ✅ RULE MỚI: có môn dưới 6.5 => luôn ưu tiên improve
+    if low:
+        out.append(f"🛑 **Cảnh báo:** Có **{len(low)} môn dưới {PASS_THRESHOLD}** → cần ưu tiên cải thiện.")
+        focus = low[:min(FOCUS_K, len(low))]
+
+        out.append("")
+        out.append("**Môn cần ưu tiên (thấp nhất trước):**")
+        out.append(", ".join([f"**{s} ({v})**" for s, v in focus]))
+
+        if len(low) > len(focus):
+            rest = ", ".join([f"{s} ({v})" for s, v in low[len(focus):]])
+            out.append(f"<small>Các môn dưới ngưỡng khác: {rest}</small>")
+
+        out.append("")
+        out.append("**Bài tập gợi ý (mỗi môn 2 task):**")
+        for subj, _v in focus:
+            out.append(f"**{subj}:**")
+            for item in pick_exercises(subj, n=2):
+                out.append(f"- {item}")
+
+        out += [
+            "",
+            "**Kế hoạch 2 tuần (mẫu):**",
+            "- 5 buổi/tuần (T2–T6).",
+            f"- Mỗi buổi: 20 phút **{focus[0][0]}** + 20 phút **{focus[1][0]}** (nếu có 2 môn)."
+            if len(focus) >= 2 else
+            f"- Mỗi buổi: 30–40 phút **{focus[0][0]}**.",
+            "- Cuối tuần: làm mini test 20 phút + cập nhật điểm → hỏi lại assistant.",
+        ]
+        return "\n".join(out)
+
+    # Không có môn dưới 6.5 => áp logic cũ theo Δ
+    if level == "Cân bằng tốt":
+        out += [
+            "✅ **Gợi ý (2–3 tuần):**",
+            "- Duy trì nhịp học hiện tại.",
+            "- Tăng thử thách nhẹ ở môn mạnh (mỗi tuần 1 nhiệm vụ khó hơn).",
+            "- Theo dõi lại sau 2 tuần.",
+        ]
+        return "\n".join(out)
+
+    if level == "Lệch vừa":
+        out += [
+            "⚠️ **Gợi ý (2–3 tuần):**",
+            "- Giữ thử thách ở nhóm mạnh.",
+            "- Tăng 15–20 phút/ngày cho nhóm yếu.",
+            "- Chia nội dung khó thành phần nhỏ (2–3 phần/buổi).",
+            "- Theo dõi lại sau 2 tuần.",
+        ]
+        return "\n".join(out)
+
+    weak_group = "Ngôn ngữ" if logic_avg > lang_avg else "Logic"
+    out += [
+        "🛑 **Gợi ý ưu tiên (Lệch rõ):**",
+        f"- **Nhóm yếu hiện tại:** {weak_group}",
+        "- Trong 2 tuần: ưu tiên kéo Δ xuống mức 'Lệch vừa'.",
+        "- Nhóm mạnh: giữ mức vừa phải (không tăng thêm).",
+        "",
+    ]
+
+    weak2 = weakest_subjects(scores_for_pick, "Logic" if weak_group == "Logic" else "Ngôn ngữ", k=2)
+    out.append("**2 môn yếu nhất & bài tập gợi ý:**")
+    for subj in weak2:
+        out.append(f"**{subj}:**")
+        for item in pick_exercises(subj, n=2):
+            out.append(f"- {item}")
+
+    out += [
+        "",
+        "**Kế hoạch 2 tuần (mẫu):**",
+        "- 5 buổi/tuần (T2–T6).",
+        f"- Mỗi buổi: 15–20 phút **{weak2[0]}** + 15–20 phút **{weak2[1]}**.",
+        "- Cuối tuần: kiểm tra nhanh 20 phút + cập nhật điểm → hỏi lại assistant.",
+    ]
+    return "\n".join(out)
+
+def html_safe(text: str) -> str:
+    if text is None:
+        return ""
+    text = (text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+    return text.replace("\n", "<br>")
+
+def ai_chat_answer(user_text: str, current, input_row) -> str:
+    t = (user_text or "").strip().lower()
+
+    if t in ["hi", "hello", "hey", "xin chào", "chào", "chao", "alo", "yo", "hiii", "helo"]:
+        return (
+            "Chào bạn 👋\n\n"
+            "Bạn thử hỏi:\n"
+            "- **Mình đang yếu môn nào?**\n"
+            "- **Cho recommendation giúp mình**\n"
+            "- **Kế hoạch 2 tuần**"
+        )
+
+    trigger = any(k in t for k in [
+        "yếu", "môn nào", "môn yếu", "yếu môn", "điểm thấp", "lệch", "cân bằng",
+        "gợi ý", "recommend", "recommendation", "tóm tắt", "tổng hợp", "kế hoạch",
+        "improve", "cải thiện", "dưới", "thấp"
+    ])
+    if trigger:
+        return full_recommendation(current, input_row)
+
+    return (
+        "Bạn hỏi thử kiểu:\n"
+        "- **Mình đang yếu môn nào?**\n"
+        "- **Cho recommendation giúp mình**\n"
+        "- **Kế hoạch 2 tuần**"
+    )
+
 
 # =========================
 # Session state init
@@ -102,181 +485,297 @@ if "students" not in st.session_state:
          "Toán": 9.5, "Khoa học": 9.0, "Tin": 9.0, "Văn": 5.0, "Sử": 5.5, "Anh": 5.0},
     ]
 
-# =========================
-# Sidebar: add student form + select student
-# =========================
-st.sidebar.header("Thêm học sinh")
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = [
+        {"role": "assistant", "content": "Xin chào! Bạn hỏi **'mình đang yếu môn nào?'** là mình phân tích & đưa recommendation luôn."}
+    ]
 
-with st.sidebar.form("add_student_form", clear_on_submit=True):
-    new_id = st.text_input("ID học sinh (duy nhất)", placeholder="VD: VS095605")
-    new_class = st.text_input("Lớp", placeholder="VD: 8A5")
-    new_name = st.text_input("Họ và tên", placeholder="VD: Trần Vũ Quốc Huy")
-    submitted = st.form_submit_button("➕ Thêm học sinh")
+if "ai_question" not in st.session_state:
+    st.session_state.ai_question = ""
 
-if submitted:
-    new_id = new_id.strip()
-    new_class = new_class.strip()
-    new_name = new_name.strip()
+if "current_student" not in st.session_state:
+    st.session_state.current_student = None
+if "current_input_row" not in st.session_state:
+    st.session_state.current_input_row = None
 
-    if not new_id or not new_class or not new_name:
-        st.sidebar.error("Vui lòng nhập đủ ID, Lớp, Họ và tên.")
-    else:
-        existing_ids = {s["ID"] for s in st.session_state.students}
-        if new_id in existing_ids:
-            st.sidebar.error("ID đã tồn tại. Hãy dùng ID khác.")
-        else:
-            st.session_state.students.append({
-                "ID": new_id, "Lớp": new_class, "Tên": new_name,
-                "Toán": 0.0, "Khoa học": 0.0, "Tin": 0.0,
-                "Văn": 0.0, "Sử": 0.0, "Anh": 0.0
-            })
-            st.sidebar.success("Đã thêm học sinh! Chọn ở danh sách bên dưới.")
-            st.rerun()
+# minimize toggle
+if "chat_minimized" not in st.session_state:
+    st.session_state.chat_minimized = False
 
-st.sidebar.markdown("---")
-st.sidebar.header("Chọn học sinh")
+# auto-scroll flag
+if "chat_autoscroll" not in st.session_state:
+    st.session_state.chat_autoscroll = True
 
-labels = [student_label(s) for s in st.session_state.students]
-selected_label = st.sidebar.selectbox("Danh sách", labels)
+# stable DOM id for chat body
+if "chat_body_id" not in st.session_state:
+    st.session_state.chat_body_id = f"chat-body-{uuid.uuid4().hex}"
 
-current = next(s for s in st.session_state.students if student_label(s) == selected_label)
 
-st.sidebar.markdown("---")
-st.sidebar.caption("Mẹo quay demo: chọn học sinh mẫu A/B/C để thấy đủ 3 mức cân bằng.")
+def send_ai_message():
+    q = st.session_state.get("ai_question", "").strip()
+    if not q:
+        return
+    cur = st.session_state.get("current_student")
+    row = st.session_state.get("current_input_row")
+    if cur is None or row is None:
+        return
+    st.session_state.chat_history.append({"role": "user", "content": q})
+    st.session_state.chat_history.append({"role": "assistant", "content": ai_chat_answer(q, cur, row)})
+    st.session_state.ai_question = ""
+    st.session_state.chat_autoscroll = True
+    st.session_state.chat_minimized = False
+
+
+def clear_ai_chat():
+    st.session_state.chat_history = [
+        {"role": "assistant", "content": "Chat đã xoá. Bạn hỏi **'mình đang yếu môn nào?'** là mình trả lời + recommendation luôn."}
+    ]
+    st.session_state.ai_question = ""
+    st.session_state.chat_autoscroll = True
+
+
+def toggle_minimize():
+    st.session_state.chat_minimized = not st.session_state.chat_minimized
+
 
 # =========================
 # Main layout
 # =========================
-left, right = st.columns([1.15, 1])
+left_col, mid_col, right_col = st.columns([0.70, 3.10, 1.40])
 
-with left:
-    st.subheader("1) Thông tin học sinh")
-    st.write(f"**ID:** {current['ID']}")
-    st.write(f"**Lớp:** {current['Lớp']}")
-    st.write(f"**Họ và tên:** {current['Tên']}")
+# LEFT NAV
+with left_col:
+    st.markdown(
+        """
+        <div class="leftNav">
+          <div class="brand">VINSCHOOL</div>
+          <div class="navItem">👤 Tài Khoản<br><small>Account</small></div>
+          <div class="navItem muted">📊 Bảng Điều Khiển<br><small>Dashboard</small></div>
+          <div class="navItem">📚 Khóa Học<br><small>Courses</small></div>
+          <div class="navItem">👥 Các nhóm<br><small>Groups</small></div>
+          <div class="navItem">📅 Lịch<br><small>Calendar</small></div>
+          <div class="navItem">📥 Hộp thư đến<br><small>Inbox</small></div>
+          <div class="navItem">🕘 Lịch sử<br><small>History</small></div>
+          <div style="margin-top:14px; opacity:0.75; font-size:12px;">Replica UI để demo</div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
-    st.subheader("2) Nhập / chỉnh điểm (0–10)")
+# MIDDLE
+with mid_col:
+    st.markdown("# Bảng Điều Khiển")
 
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown("### Nhóm Logic – STEM")
-        math = st.number_input("Toán", 0.0, 10.0, float(current["Toán"]), 0.1)
-        science = st.number_input("Khoa học", 0.0, 10.0, float(current["Khoa học"]), 0.1)
-        it = st.number_input("Tin", 0.0, 10.0, float(current["Tin"]), 0.1)
+    r1 = st.columns(3)
+    r2 = st.columns(3)
+    for i, subj in enumerate(SUBJECT_CARDS):
+        target = r1[i] if i < 3 else r2[i - 3]
+        with target:
+            st.markdown(
+                f"""
+                <div class="course-card">
+                  <div class="course-top" style="background:{subj["color"]};">
+                    <div class="course-dots">⋮</div>
+                  </div>
+                  <div class="course-body">
+                    <div class="course-slug">{subj["slug"]}</div>
+                    <div class="course-code">{subj["name"]}<br>{subj["code"]}<br>{subj["year"]}</div>
+                    <div class="course-icons"><span>📝</span><span>💬</span><span>📁</span></div>
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
-    with c2:
-        st.markdown("### Nhóm Ngôn ngữ – Xã hội")
-        lit = st.number_input("Văn", 0.0, 10.0, float(current["Văn"]), 0.1)
-        history = st.number_input("Sử", 0.0, 10.0, float(current["Sử"]), 0.1)
-        english = st.number_input("Anh", 0.0, 10.0, float(current["Anh"]), 0.1)
+    # Balance tool under cards
+    st.markdown('<div class="midPanel">', unsafe_allow_html=True)
+    st.markdown("## Thước Cân Bằng Học Tập")
+    st.caption(f"Rule mới: Nếu có **bất kỳ môn nào < {PASS_THRESHOLD}** thì sẽ báo cần cải thiện + gợi ý bài tập.")
 
-    btn1, btn2, btn3 = st.columns(3)
-    analyze = btn1.button("Phân tích", type="primary")
-    save_scores = btn2.button("💾 Lưu điểm")
-    reset_scores = btn3.button("↩️ Reset về điểm đã lưu")
+    labels = [student_label(s) for s in st.session_state.students]
+    selected = st.selectbox("Chọn học sinh", labels, key="selected_student")
+    current = next(s for s in st.session_state.students if student_label(s) == selected)
 
-    # current input row
-    input_row = {
-        "Toán": math, "Khoa học": science, "Tin": it,
-        "Văn": lit, "Sử": history, "Anh": english
-    }
+    # load student scores into widget keys when switching student
+    if st.session_state.get("loaded_student_id") != current["ID"]:
+        st.session_state.loaded_student_id = current["ID"]
+        st.session_state.score_math = float(current["Toán"])
+        st.session_state.score_science = float(current["Khoa học"])
+        st.session_state.score_it = float(current["Tin"])
+        st.session_state.score_lit = float(current["Văn"])
+        st.session_state.score_history = float(current["Sử"])
+        st.session_state.score_english = float(current["Anh"])
 
-    if save_scores:
-        for s in st.session_state.students:
-            if s["ID"] == current["ID"]:
-                s.update(input_row)
-                break
-        st.success("Đã lưu điểm cho học sinh.")
-        st.rerun()
+    colA, colB = st.columns(2)
+    with colA:
+        st.markdown("**Logic – STEM**")
+        math = st.number_input("Toán", 0.0, 10.0, step=0.1, key="score_math")
+        sci = st.number_input("Khoa học", 0.0, 10.0, step=0.1, key="score_science")
+        it = st.number_input("Tin", 0.0, 10.0, step=0.1, key="score_it")
+    with colB:
+        st.markdown("**Ngôn ngữ – Xã hội**")
+        lit = st.number_input("Văn", 0.0, 10.0, step=0.1, key="score_lit")
+        hist = st.number_input("Sử", 0.0, 10.0, step=0.1, key="score_history")
+        eng = st.number_input("Anh", 0.0, 10.0, step=0.1, key="score_english")
 
-    if reset_scores:
-        st.rerun()
-
-with right:
-    st.subheader("3) Dashboard kết quả")
+    input_row = {"Toán": math, "Khoa học": sci, "Tin": it, "Văn": lit, "Sử": hist, "Anh": eng}
+    st.session_state.current_student = current
+    st.session_state.current_input_row = input_row
 
     logic_avg, lang_avg, diff, level = compute_scores({**current, **input_row})
+
+    # NEW: check low subjects
+    low_ui = get_low_subjects(input_row, threshold=PASS_THRESHOLD)
 
     k1, k2, k3 = st.columns(3)
     k1.metric("TB Logic", logic_avg)
     k2.metric("TB Ngôn ngữ", lang_avg)
-    k3.metric("Chênh lệch (Δ)", diff)
+    k3.metric("Δ", diff)
 
-    st.write("Mức cân bằng:")
-    badge(level)
+    if low_ui:
+        preview = ", ".join([f"{s}({v})" for s, v in low_ui[:3]]) + ("..." if len(low_ui) > 3 else "")
+        st.error(f"Cần cải thiện: Có {len(low_ui)} môn dưới {PASS_THRESHOLD}: {preview}")
+    else:
+        if level == "Cân bằng tốt":
+            st.success(level)
+        elif level == "Lệch vừa":
+            st.warning(level)
+        else:
+            st.error(level)
 
-    st.markdown("### Thước cân bằng")
     st.progress(min(diff / 3, 1.0))
-    st.caption("Ngưỡng: Δ < 1 (tốt), 1 ≤ Δ < 2 (vừa), Δ ≥ 2 (rõ)")
+    st.caption("Ngưỡng cân bằng theo Δ: Δ < 1 (tốt), 1 ≤ Δ < 2 (vừa), Δ ≥ 2 (rõ)")
 
-    st.markdown("### Biểu đồ 2 nhóm")
-    fig, ax = plt.subplots()
-    ax.bar(["Logic–STEM", "Ngôn ngữ–Xã hội"], [logic_avg, lang_avg])
+    fig, ax = plt.subplots(figsize=(6, 3.2))
+    ax.bar(["Logic", "Ngôn ngữ"], [logic_avg, lang_avg])
     ax.set_ylim(0, 10)
-    ax.set_ylabel("Điểm TB (0–10)")
+    ax.set_ylabel("Điểm TB")
     st.pyplot(fig)
 
-# =========================
-# Recommendations
-# =========================
-st.markdown("---")
-st.subheader("4) Gợi ý điều chỉnh (áp dụng 2–3 tuần)")
+    st.markdown("</div>", unsafe_allow_html=True)
 
-if level == "Cân bằng tốt":
-    st.write("✅ **Mục tiêu:** Duy trì ổn định và phát triển đều.")
-    st.write("- Duy trì nhịp học hiện tại.")
-    st.write("- Tăng thử thách nhẹ ở môn mạnh.")
-    st.write("- Theo dõi định kỳ để đảm bảo cân bằng được giữ ổn định.")
+# RIGHT: Todo
+with right_col:
+    st.markdown('<div class="rightPanel">', unsafe_allow_html=True)
+    st.markdown('<div class="todo-title">Cần làm</div>', unsafe_allow_html=True)
 
-elif level == "Lệch vừa":
-    st.write("⚠️ **Mục tiêu:** Giảm chênh lệch mà không làm mất động lực ở nhóm mạnh.")
-    st.write("- Giữ thử thách ở nhóm mạnh.")
-    st.write("- Tăng 15–20 phút/ngày cho nhóm yếu.")
-    st.write("- Chia nội dung khó thành phần nhỏ để tránh quá tải.")
+    def todo(icon, title, course, due, points=None):
+        pts = f"<small><b>{points} điểm</b></small><br>" if points is not None else ""
+        st.markdown(
+            f"""
+            <div class="todo-item">
+              <div>{icon}</div>
+              <div>
+                <b>{title}</b>
+                <small>{course}</small>
+                {pts}
+                <small>{due}</small>
+              </div>
+              <div class="todo-x">×</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
-else:
-    st.write("🛑 **Mục tiêu:** Ưu tiên cải thiện nhóm yếu trong 2 tuần để kéo Δ xuống mức 'lệch vừa'.")
-    st.write("- Giữ mức vừa phải ở nhóm mạnh (không tăng thêm).")
-    st.write("- Đánh giá lại sau mỗi 2 tuần.")
+    todo("💬", "4. Hướng dẫn về nhà tuần 22", "geography", "ThO2 13 tại 11:59")
+    todo("📝", "4. NỘP BÀI THI GIỮA KÌ 2 TẠI ĐÂY - DEADLINE 13/2/2026", "geography", "ThO2 13 tại 23:59", points=10)
+    todo("📌", "4. Quiz củng cố trước tiết học tuần 26 CÓ LẤY ĐIỂM KIỂM TRA 15 PHÚT LẦN 2 HK2", "geography", "ThO2 16 tại 23:59", points=10)
+    todo("💬", "2. Thảo luận trước tiết học tuần 26 - BẮT BUỘC LÀM - CÔ CHECK BÀI TRÊN LỚP", "geography", "ThO3 13 tại 23:59")
+    todo("📌", "3. Quiz củng cố bài học tuần 26 + 27", "geography", "ThO3 20 tại 11:59", points=10)
 
-    # Determine weaker group
-    weak_group = "Ngôn ngữ" if logic_avg > lang_avg else "Logic"
-    st.markdown(f"### Nhóm yếu hiện tại: **{weak_group}**")
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    scores_for_pick = {
-        "Toán": math, "Khoa học": science, "Tin": it,
-        "Văn": lit, "Sử": history, "Anh": english
-    }
-    weak2 = weakest_subjects(scores_for_pick, "Logic" if weak_group == "Logic" else "Ngôn ngữ", k=2)
-
-    st.markdown("### Bài tập cụ thể cho 2 môn yếu nhất (15–20 phút/môn)")
-    for subj in weak2:
-        st.markdown(f"**{subj}**")
-        for item in pick_exercises(subj, n=2):
-            st.write(f"- {item}")
-
-    st.markdown("### Kế hoạch 2 tuần (mẫu)")
-    st.write("- Mỗi tuần 5 buổi (Thứ 2–Thứ 6).")
-    st.write("- Mỗi buổi: 1 nhiệm vụ môn yếu #1 + 1 nhiệm vụ môn yếu #2.")
-    st.write("- Cuối tuần: làm bài kiểm tra ngắn 20 phút cho 2 môn yếu và cập nhật lại điểm.")
-
-st.caption("Lưu ý: Prototype minh chứng ý tưởng, không thay thế giáo viên/học sinh.")
 
 # =========================
-# Table view
+# FLOATING AI CHAT (BOTTOM-RIGHT + MINIMIZE) ✅
 # =========================
-st.markdown("---")
-st.subheader("5) Bảng tổng hợp nhiều học sinh")
+chat_container = st.container()
 
-df = pd.DataFrame(st.session_state.students)
+with chat_container:
+    # ✅ fixed bottom-right, responsive
+    st_float_container(
+        key="ai-chat",
+        css="""
+          position: fixed !important;
+          right: 20px !important;
+          bottom: 20px !important;
+          width: min(380px, 95vw) !important;
+          max-height: 85vh !important;
+        """
+    )
 
-computed = df.apply(
-    lambda r: pd.Series(compute_scores(r), index=["TB Logic", "TB Ngôn ngữ", "Δ", "Mức"]),
-    axis=1
-)
-df2 = pd.concat([df, computed], axis=1)
-df2 = df2[["ID", "Lớp", "Tên", "Toán", "Khoa học", "Tin", "Văn", "Sử", "Anh", "TB Logic", "TB Ngôn ngữ", "Δ", "Mức"]]
-df2 = df2.sort_values(by="Δ", ascending=False)
+    if st.session_state.chat_minimized:
+        pill_cols = st.columns([3, 1])
+        with pill_cols[0]:
+            st.markdown(
+                """
+                <div class="chat-pill">
+                  <div class="dot"></div>
+                  <div>AI Assistant</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with pill_cols[1]:
+            st.markdown('<div class="miniBtn">', unsafe_allow_html=True)
+            st.button("Mở", on_click=toggle_minimize, use_container_width=True)
+            st.markdown("</div>", unsafe_allow_html=True)
 
-st.dataframe(df2, use_container_width=True)
-st.caption("Sắp xếp theo Δ giảm dần để ưu tiên học sinh lệch rõ.")
+    else:
+        bubbles = []
+        for msg in st.session_state.chat_history:
+            role = msg.get("role", "assistant")
+            content = html_safe(msg.get("content", ""))
+            if role == "user":
+                bubbles.append(f'<div class="bubble user"><div class="bname">Bạn</div>{content}</div>')
+            else:
+                bubbles.append(f'<div class="bubble ai"><div class="bname">AI</div>{content}</div>')
+
+        st.markdown(
+            f"""
+            <div class="chat-shell" style="display:flex; flex-direction:column; height:min(520px, 80vh);">
+              <div class="chat-head">
+                <div>AI Assistant</div>
+                <div class="chat-hint">Hỏi: "mình yếu môn nào?"</div>
+              </div>
+
+              <div class="chat-body" id="{st.session_state.chat_body_id}" style="flex:1; overflow-y:auto;">
+                {''.join(bubbles)}
+              </div>
+
+              <div class="chat-foot">
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.text_input(
+            "AI",
+            key="ai_question",
+            placeholder="Nhập câu hỏi…",
+            label_visibility="collapsed",
+        )
+
+        a, b, c = st.columns([1, 1, 1])
+        with a:
+            st.button("Gửi", on_click=send_ai_message, use_container_width=True)
+        with b:
+            st.button("Xoá", on_click=clear_ai_chat, use_container_width=True)
+        with c:
+            st.button("Thu nhỏ", on_click=toggle_minimize, use_container_width=True)
+
+        st.markdown("</div></div>", unsafe_allow_html=True)
+
+        if st.session_state.chat_autoscroll:
+            components.html(
+                f"""
+                <script>
+                  (function(){{
+                    const el = window.parent.document.getElementById("{st.session_state.chat_body_id}");
+                    if (el) el.scrollTop = el.scrollHeight;
+                  }})();
+                </script>
+                """,
+                height=0,
+                width=0,
+            )
+            st.session_state.chat_autoscroll = False
