@@ -1,4 +1,5 @@
 import uuid
+import unicodedata
 import streamlit as st
 import streamlit.components.v1 as components
 import matplotlib.pyplot as plt
@@ -296,17 +297,24 @@ EXERCISES = {
 PASS_THRESHOLD = 6.5     # chỉ cần < 6.5 là phải improve
 FOCUS_K = 3              # ưu tiên tối đa 3 môn thấp nhất
 ALL_SUBJECTS = ["Toán", "Khoa học", "Tin", "Văn", "Sử", "Anh"]
+DISPLAY_NAME = {"Anh": "Tiếng Anh", "Sử": "Lịch Sử"}
 
 
 # =========================
 # Helpers
 # =========================
+def normalize_text(text: str) -> str:
+    t = (text or "").lower().strip()
+    t = unicodedata.normalize("NFD", t)
+    t = "".join(ch for ch in t if unicodedata.category(ch) != "Mn")  # remove accents
+    t = "".join(ch if ch.isalnum() or ch.isspace() else " " for ch in t)  # remove punctuation
+    return " ".join(t.split())
+
 def pick_exercises(subject: str, n: int = 2):
     items = EXERCISES.get(subject, [])
     return items[:n] if len(items) >= n else items
 
 def compute_scores(row):
-    # ép float để tránh string
     math = float(row.get("Toán", 0))
     sci  = float(row.get("Khoa học", 0))
     it   = float(row.get("Tin", 0))
@@ -343,6 +351,30 @@ def get_low_subjects(scores: dict, threshold: float = PASS_THRESHOLD):
     low.sort(key=lambda x: x[1])
     return low
 
+def hk2_revision_plan(n_each: int = 3) -> str:
+    out = []
+    out.append("📚 ÔN TẬP HỌC KỲ 2 - BÀI TẬP GỢI Ý (TẤT CẢ CÁC MÔN)")
+    out.append(f"(Mỗi môn {n_each} bài)")
+    out.append("")
+    for subj in ALL_SUBJECTS:
+        disp = DISPLAY_NAME.get(subj, subj)
+        out.append(f"{disp}:")
+        items = EXERCISES.get(subj, [])
+        if not items:
+            out.append("• (Chưa có bài tập gợi ý)")
+        else:
+            for item in items[:n_each]:
+                out.append(f"• {item}")
+        out.append("")
+    out.append("Gợi ý lịch ôn (mẫu 2 tuần):")
+    out.append("• T2: Toán + Văn")
+    out.append("• T3: Khoa học + Tiếng Anh")
+    out.append("• T4: Tin + Lịch Sử")
+    out.append("• T5: Toán + Tiếng Anh")
+    out.append("• T6: Văn + Khoa học")
+    out.append("• Cuối tuần: làm 1 mini-test + chữa lỗi + tổng kết")
+    return "\n".join(out)
+
 def full_recommendation(current, input_row) -> str:
     logic_avg, lang_avg, diff, level = compute_scores({**current, **input_row})
 
@@ -354,87 +386,86 @@ def full_recommendation(current, input_row) -> str:
         "Sử": float(input_row["Sử"]),
         "Anh": float(input_row["Anh"]),
     }
-
     low = get_low_subjects(scores_for_pick, threshold=PASS_THRESHOLD)
 
     out = []
-    out.append(f"**Kết quả:** TB Logic={logic_avg} | TB Ngôn ngữ={lang_avg} | Δ={diff}")
-    out.append(f"**Cân bằng nhóm:** {level}")
+    out.append(f"Kết quả: TB Logic={logic_avg} | TB Ngôn ngữ={lang_avg} | Δ={diff}")
+    out.append(f"Cân bằng nhóm: {level}")
     out.append("")
 
     # ✅ RULE MỚI: có môn dưới 6.5 => luôn ưu tiên improve
     if low:
-        out.append(f"🛑 **Cảnh báo:** Có **{len(low)} môn dưới {PASS_THRESHOLD}** → cần ưu tiên cải thiện.")
+        out.append(f"🛑 CẢNH BÁO: Có {len(low)} môn dưới {PASS_THRESHOLD} → cần ưu tiên cải thiện.")
         focus = low[:min(FOCUS_K, len(low))]
-
         out.append("")
-        out.append("**Môn cần ưu tiên (thấp nhất trước):**")
-        out.append(", ".join([f"**{s} ({v})**" for s, v in focus]))
+        out.append("Môn ưu tiên (thấp nhất trước):")
+        out.append("• " + ", ".join([f"{DISPLAY_NAME.get(s, s)} ({v})" for s, v in focus]))
 
         if len(low) > len(focus):
-            rest = ", ".join([f"{s} ({v})" for s, v in low[len(focus):]])
-            out.append(f"<small>Các môn dưới ngưỡng khác: {rest}</small>")
+            rest = ", ".join([f"{DISPLAY_NAME.get(s, s)} ({v})" for s, v in low[len(focus):]])
+            out.append(f"• Các môn dưới ngưỡng khác: {rest}")
 
         out.append("")
-        out.append("**Bài tập gợi ý (mỗi môn 2 task):**")
+        out.append("Bài tập gợi ý (mỗi môn 2 task):")
         for subj, _v in focus:
-            out.append(f"**{subj}:**")
+            disp = DISPLAY_NAME.get(subj, subj)
+            out.append(f"{disp}:")
             for item in pick_exercises(subj, n=2):
-                out.append(f"- {item}")
+                out.append(f"• {item}")
 
-        out += [
-            "",
-            "**Kế hoạch 2 tuần (mẫu):**",
-            "- 5 buổi/tuần (T2–T6).",
-            f"- Mỗi buổi: 20 phút **{focus[0][0]}** + 20 phút **{focus[1][0]}** (nếu có 2 môn)."
-            if len(focus) >= 2 else
-            f"- Mỗi buổi: 30–40 phút **{focus[0][0]}**.",
-            "- Cuối tuần: làm mini test 20 phút + cập nhật điểm → hỏi lại assistant.",
-        ]
+        out.append("")
+        out.append("Kế hoạch 2 tuần (mẫu):")
+        out.append("• 5 buổi/tuần (T2–T6).")
+        if len(focus) >= 2:
+            out.append(f"• Mỗi buổi: 20 phút {DISPLAY_NAME.get(focus[0][0], focus[0][0])} + 20 phút {DISPLAY_NAME.get(focus[1][0], focus[1][0])}.")
+        else:
+            out.append(f"• Mỗi buổi: 30–40 phút {DISPLAY_NAME.get(focus[0][0], focus[0][0])}.")
+        out.append("• Cuối tuần: mini test 20 phút + cập nhật điểm → hỏi lại assistant.")
         return "\n".join(out)
 
     # Không có môn dưới 6.5 => áp logic cũ theo Δ
     if level == "Cân bằng tốt":
         out += [
-            "✅ **Gợi ý (2–3 tuần):**",
-            "- Duy trì nhịp học hiện tại.",
-            "- Tăng thử thách nhẹ ở môn mạnh (mỗi tuần 1 nhiệm vụ khó hơn).",
-            "- Theo dõi lại sau 2 tuần.",
+            "✅ Gợi ý (2–3 tuần):",
+            "• Duy trì nhịp học hiện tại.",
+            "• Tăng thử thách nhẹ ở môn mạnh (mỗi tuần 1 nhiệm vụ khó hơn).",
+            "• Theo dõi lại sau 2 tuần.",
         ]
         return "\n".join(out)
 
     if level == "Lệch vừa":
         out += [
-            "⚠️ **Gợi ý (2–3 tuần):**",
-            "- Giữ thử thách ở nhóm mạnh.",
-            "- Tăng 15–20 phút/ngày cho nhóm yếu.",
-            "- Chia nội dung khó thành phần nhỏ (2–3 phần/buổi).",
-            "- Theo dõi lại sau 2 tuần.",
+            "⚠️ Gợi ý (2–3 tuần):",
+            "• Giữ thử thách ở nhóm mạnh.",
+            "• Tăng 15–20 phút/ngày cho nhóm yếu.",
+            "• Chia nội dung khó thành phần nhỏ (2–3 phần/buổi).",
+            "• Theo dõi lại sau 2 tuần.",
         ]
         return "\n".join(out)
 
     weak_group = "Ngôn ngữ" if logic_avg > lang_avg else "Logic"
     out += [
-        "🛑 **Gợi ý ưu tiên (Lệch rõ):**",
-        f"- **Nhóm yếu hiện tại:** {weak_group}",
-        "- Trong 2 tuần: ưu tiên kéo Δ xuống mức 'Lệch vừa'.",
-        "- Nhóm mạnh: giữ mức vừa phải (không tăng thêm).",
+        "🛑 Gợi ý ưu tiên (Lệch rõ):",
+        f"• Nhóm yếu hiện tại: {weak_group}",
+        "• Trong 2 tuần: ưu tiên kéo Δ xuống mức 'Lệch vừa'.",
+        "• Nhóm mạnh: giữ mức vừa phải (không tăng thêm).",
         "",
     ]
 
     weak2 = weakest_subjects(scores_for_pick, "Logic" if weak_group == "Logic" else "Ngôn ngữ", k=2)
-    out.append("**2 môn yếu nhất & bài tập gợi ý:**")
+    out.append("2 môn yếu nhất & bài tập gợi ý:")
     for subj in weak2:
-        out.append(f"**{subj}:**")
+        disp = DISPLAY_NAME.get(subj, subj)
+        out.append(f"{disp}:")
         for item in pick_exercises(subj, n=2):
-            out.append(f"- {item}")
+            out.append(f"• {item}")
 
     out += [
         "",
-        "**Kế hoạch 2 tuần (mẫu):**",
-        "- 5 buổi/tuần (T2–T6).",
-        f"- Mỗi buổi: 15–20 phút **{weak2[0]}** + 15–20 phút **{weak2[1]}**.",
-        "- Cuối tuần: kiểm tra nhanh 20 phút + cập nhật điểm → hỏi lại assistant.",
+        "Kế hoạch 2 tuần (mẫu):",
+        "• 5 buổi/tuần (T2–T6).",
+        f"• Mỗi buổi: 15–20 phút {DISPLAY_NAME.get(weak2[0], weak2[0])} + 15–20 phút {DISPLAY_NAME.get(weak2[1], weak2[1])}.",
+        "• Cuối tuần: kiểm tra nhanh 20 phút + cập nhật điểm → hỏi lại assistant.",
     ]
     return "\n".join(out)
 
@@ -445,30 +476,43 @@ def html_safe(text: str) -> str:
     return text.replace("\n", "<br>")
 
 def ai_chat_answer(user_text: str, current, input_row) -> str:
-    t = (user_text or "").strip().lower()
+    tn = normalize_text(user_text)
 
-    if t in ["hi", "hello", "hey", "xin chào", "chào", "chao", "alo", "yo", "hiii", "helo"]:
+    # hello
+    if tn in ["hi", "hello", "hey", "xin chao", "chao", "alo", "yo", "hiii", "helo"]:
         return (
             "Chào bạn 👋\n\n"
             "Bạn thử hỏi:\n"
-            "- **Mình đang yếu môn nào?**\n"
-            "- **Cho recommendation giúp mình**\n"
-            "- **Kế hoạch 2 tuần**"
+            "• Mình đang yếu môn nào?\n"
+            "• Cho recommendation giúp mình\n"
+            "• Kế hoạch 2 tuần\n"
+            "• Tôi cần ôn các bài tập gì?"
         )
 
-    trigger = any(k in t for k in [
-        "yếu", "môn nào", "môn yếu", "yếu môn", "điểm thấp", "lệch", "cân bằng",
-        "gợi ý", "recommend", "recommendation", "tóm tắt", "tổng hợp", "kế hoạch",
-        "improve", "cải thiện", "dưới", "thấp"
+    # ✅ NEW: ôn tập tất cả môn HK2
+    if (
+        "toi can on cac bai tap gi" in tn
+        or "toi can on bai tap gi" in tn
+        or "on cac bai tap gi" in tn
+        or ("on" in tn and "bai tap" in tn and ("hoc ky 2" in tn or "hoc ki 2" in tn or "hk2" in tn))
+    ):
+        return hk2_revision_plan(n_each=3)
+
+    # recommendation theo điểm
+    trigger = any(k in tn for k in [
+        "yeu", "mon nao", "mon yeu", "yeu mon", "diem thap", "lech", "can bang",
+        "goi y", "recommend", "recommendation", "tom tat", "tong hop", "ke hoach",
+        "improve", "cai thien", "duoi", "thap"
     ])
     if trigger:
         return full_recommendation(current, input_row)
 
     return (
         "Bạn hỏi thử kiểu:\n"
-        "- **Mình đang yếu môn nào?**\n"
-        "- **Cho recommendation giúp mình**\n"
-        "- **Kế hoạch 2 tuần**"
+        "• Mình đang yếu môn nào?\n"
+        "• Cho recommendation giúp mình\n"
+        "• Kế hoạch 2 tuần\n"
+        "• Tôi cần ôn các bài tập gì?"
     )
 
 
@@ -487,7 +531,7 @@ if "students" not in st.session_state:
 
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = [
-        {"role": "assistant", "content": "Xin chào! Bạn hỏi **'mình đang yếu môn nào?'** là mình phân tích & đưa recommendation luôn."}
+        {"role": "assistant", "content": "Xin chào! Bạn hỏi “mình đang yếu môn nào?” hoặc “Tôi cần ôn các bài tập gì?” là mình gợi ý luôn."}
     ]
 
 if "ai_question" not in st.session_state:
@@ -498,15 +542,12 @@ if "current_student" not in st.session_state:
 if "current_input_row" not in st.session_state:
     st.session_state.current_input_row = None
 
-# minimize toggle
 if "chat_minimized" not in st.session_state:
     st.session_state.chat_minimized = False
 
-# auto-scroll flag
 if "chat_autoscroll" not in st.session_state:
     st.session_state.chat_autoscroll = True
 
-# stable DOM id for chat body
 if "chat_body_id" not in st.session_state:
     st.session_state.chat_body_id = f"chat-body-{uuid.uuid4().hex}"
 
@@ -528,7 +569,7 @@ def send_ai_message():
 
 def clear_ai_chat():
     st.session_state.chat_history = [
-        {"role": "assistant", "content": "Chat đã xoá. Bạn hỏi **'mình đang yếu môn nào?'** là mình trả lời + recommendation luôn."}
+        {"role": "assistant", "content": "Chat đã xoá. Bạn hỏi “mình đang yếu môn nào?” hoặc “Tôi cần ôn các bài tập gì?” là mình trả lời luôn."}
     ]
     st.session_state.ai_question = ""
     st.session_state.chat_autoscroll = True
@@ -590,7 +631,7 @@ with mid_col:
     # Balance tool under cards
     st.markdown('<div class="midPanel">', unsafe_allow_html=True)
     st.markdown("## Thước Cân Bằng Học Tập")
-    st.caption(f"Rule mới: Nếu có **bất kỳ môn nào < {PASS_THRESHOLD}** thì sẽ báo cần cải thiện + gợi ý bài tập.")
+    st.caption(f"Rule: Nếu có bất kỳ môn nào < {PASS_THRESHOLD} → báo cần cải thiện + gợi ý bài tập.")
 
     labels = [student_label(s) for s in st.session_state.students]
     selected = st.selectbox("Chọn học sinh", labels, key="selected_student")
@@ -624,7 +665,6 @@ with mid_col:
 
     logic_avg, lang_avg, diff, level = compute_scores({**current, **input_row})
 
-    # NEW: check low subjects
     low_ui = get_low_subjects(input_row, threshold=PASS_THRESHOLD)
 
     k1, k2, k3 = st.columns(3)
@@ -633,7 +673,7 @@ with mid_col:
     k3.metric("Δ", diff)
 
     if low_ui:
-        preview = ", ".join([f"{s}({v})" for s, v in low_ui[:3]]) + ("..." if len(low_ui) > 3 else "")
+        preview = ", ".join([f"{DISPLAY_NAME.get(s, s)}({v})" for s, v in low_ui[:3]]) + ("..." if len(low_ui) > 3 else "")
         st.error(f"Cần cải thiện: Có {len(low_ui)} môn dưới {PASS_THRESHOLD}: {preview}")
     else:
         if level == "Cân bằng tốt":
@@ -692,7 +732,6 @@ with right_col:
 chat_container = st.container()
 
 with chat_container:
-    # ✅ fixed bottom-right, responsive
     st_float_container(
         key="ai-chat",
         css="""
@@ -736,7 +775,7 @@ with chat_container:
             <div class="chat-shell" style="display:flex; flex-direction:column; height:min(520px, 80vh);">
               <div class="chat-head">
                 <div>AI Assistant</div>
-                <div class="chat-hint">Hỏi: "mình yếu môn nào?"</div>
+                <div class="chat-hint">Gõ: “Tôi cần ôn các bài tập gì?”</div>
               </div>
 
               <div class="chat-body" id="{st.session_state.chat_body_id}" style="flex:1; overflow-y:auto;">
