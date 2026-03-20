@@ -1618,19 +1618,10 @@ with mid_col:
     k3.metric("Δ", diff)
 
     if low_ui:
-    preview = ", ".join(
-        [f"{DISPLAY_NAME.get(s, s)}({v})" for s, v in low_ui[:3]]
-    ) + ("..." if len(low_ui) > 3 else "")
-    st.error(
-        f"Cần cải thiện: Có {len(low_ui)} môn dưới {PASS_THRESHOLD}: {preview}"
-    )
-else:
-    if level == "Cân bằng tốt":
-        st.success(level)
-    elif level == "Lệch vừa":
-        st.warning(level)
+        preview = ", ".join([f"{DISPLAY_NAME.get(s, s)}({v})" for s, v in low_ui[:3]]) + ("..." if len(low_ui) > 3 else "")
+        st.error(f"Cần cải thiện: Có {len(low_ui)} môn dưới {PASS_THRESHOLD}: {preview}")
     else:
-        st.error(level)
+        st.success(level) if level == "Cân bằng tốt" else st.warning(level) if level == "Lệch vừa" else st.error(level)
 
     st.progress(min(diff / 3, 1.0))
     st.caption("Ngưỡng cân bằng theo Δ: Δ < 1 (tốt), 1 ≤ Δ < 2 (vừa), Δ ≥ 2 (rõ)")
